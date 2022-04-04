@@ -22,4 +22,4 @@ class TestMdp(unittest.TestCase):
         p2, r2 = mdp.env_to_mat_2(env.P)
         self.assertTrue(np.all(p == p2) and np.all(r == r2))
 
-    def t
+
