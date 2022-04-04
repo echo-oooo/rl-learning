@@ -66,22 +66,28 @@ def play(env, agent, render=True, max_step=0):
     return total_reward
 
 
-def random_policy(num_s, num_a, seed=None):
+def random_policy(num_s, num_a, **kwargs):
     """ 生成随机策略. 
     
     :param num_s: 状态数量.
-    :param num_a: 动作数量.    
+    :param num_a: 动作数量.
+    :param seed: 随机种子.
+    :param type_: 类型. 'avg' 平均概率.
     :return: 随机策略矩阵. 
     """
-    if seed is None:
-        pi = np.random.rand(num_s, num_a)
-        for si in range(num_s):
-            pi[si] = pi[si] / np.sum(pi[si])
-        return pi
-    else:
-        np.random.seed(seed)
+    if 'seed' in kwargs:
+        np.random.seed(kwargs['seed'])
         pi = np.zeros((num_s, num_a))
         a = [np.random.randint(num_a) for _ in range(num_s)]
         for s in range(num_s):
             pi[s, a[s]] = 1.0
+        return pi
+    elif 'type_' in kwargs and kwargs['type_'] == 'avg':
+        pi = np.zeros((num_s, num_a))
+        pi.fill(1.0/num_a)
+        return pi
+    else:
+        pi = np.random.rand(num_s, num_a)
+        for si in range(num_s):
+            pi[si] = pi[si] / np.sum(pi[si])
         return pi

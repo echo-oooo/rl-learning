@@ -20,6 +20,9 @@ env_to_mat: 环境转换为概率矩阵.
 
 """
 
+from __future__ import annotations
+from typing import Tuple
+
 import numpy as np
 import rl
 
@@ -31,10 +34,12 @@ class Mdp:
         :param env: 根据 env 自动初始化策略.
         :param pi: 手动指定策略.
         """
+        self.policy = None
+
         if 'env' in kwargs:
             env = kwargs['env']
             num_s, num_a = rl.env_n(env)
-            self.policy = rl.random_policy(num_s, num_a)
+            self.policy = rl.random_policy(num_s, num_a, type_='avg')
         if 'pi' in kwargs:
             self.policy = kwargs['pi']
 
@@ -54,8 +59,15 @@ class Mdp:
             self.policy, _ = iterate_policy(p, r, gamma=gamma)
 
 
-def iterate_policy(p, r, gamma=0.9, max_step=25):
-    """ 使用策略迭代提升获取策略. """
+def iterate_policy(p, r, gamma=0.9, max_step=25) -> Tuple[np.ndarray, np.ndarray]:
+    """ 使用策略迭代提升获取策略. 
+    
+    :param p: 状态转移矩阵. p(s'|s, a)
+    :param r: 状态/动作奖励矩阵. r(s, a)
+    :param gamma: 折扣因子.
+    :param max_step: 最多迭代步数.
+    :return: (策略，状态价值).
+    """
     pi_curr = rl.random_policy(*r.shape)
     pi_next = pi_curr.copy()
     for _ in range(max_step):
@@ -67,21 +79,30 @@ def iterate_policy(p, r, gamma=0.9, max_step=25):
     return pi_next, evaluate_policy(p, r, pi_next, gamma=gamma)
 
 
-def iterate_value(p, r, gamma=0.9, max_step=25, eps=1e-5):
-    """ 使用价值迭代获取策略. """
+def iterate_value(p, r, gamma=0.9, max_step=50, eps=1e-4) -> Tuple[np.ndarray, np.ndarray]:
+    """ 使用价值迭代获取策略. 
+    
+    :param p: 状态转移矩阵. p(s'|s, a)
+    :param r: 状态/动作奖励矩阵. r(s, a)
+    :param gamma: 折扣因子.
+    :param max_step: 最多迭代步数.
+    :return: (策略，状态价值).
+    """
     v, v_next = np.zeros((r.shape[0], )), np.zeros((r.shape[0], ))
     for _ in range(max_step):
         temp = r + gamma * np.dot(p, v)
         v_next = np.max(temp, axis=1)
-        if np.max(np.abs(v_next - v)) < eps:
-            break
+        delta = np.max(np.abs(v_next - v))
         v = v_next.copy()
+        if delta < eps:
+            break
+
     q = v_to_q(p, r, v_next, gamma=gamma)
     pi = q_to_pi(q)
     return pi, v
 
 
-def env_evaluate_policy(P, pi, gamma):
+def env_evaluate_policy(P, pi, gamma=0.9) -> np.ndarray:
     """ 针对 gym 环境的策略评估. 
 
     :param P:   gym.env.P
@@ -93,7 +114,7 @@ def env_evaluate_policy(P, pi, gamma):
     return evaluate_policy(p, r, pi, gamma)
 
 
-def evaluate_policy(p, r, pi, gamma=0.9, eps=1e-5, max_round=25):
+def evaluate_policy(p, r, pi, gamma=0.9, eps=1e-4, max_round=100) -> np.ndarray:
     """ 策略评估. 
     
     :param p: 状态转移矩阵. p(s'|s, a)
@@ -104,6 +125,7 @@ def evaluate_policy(p, r, pi, gamma=0.9, eps=1e-5, max_round=25):
     """
     num_s = pi.shape[0]
     v, v_next = np.zeros((num_s, )), np.zeros((num_s, ))
+    # v.fill(-100)
     for _ in range(max_round):
         q = v_to_q(p, r, v, gamma=gamma)
         v_next = np.sum(np.multiply(pi, q), axis=1)
@@ -114,8 +136,12 @@ def evaluate_policy(p, r, pi, gamma=0.9, eps=1e-5, max_round=25):
     return v_next
 
 
-def q_to_pi(q):
-    """ 从动作价值函数生成策略. """
+def q_to_pi(q) -> np.ndarray:
+    """ 从动作价值函数生成策略. 
+
+    :param q: 动作价值. q(s, a)
+    :return: 策略. pi(a|s)
+    """
     pi = np.zeros_like(q)
     for s in range(q.shape[0]):
         pi[s] = (q[s] == np.max(q[s]))
@@ -123,20 +149,20 @@ def q_to_pi(q):
     return pi
 
 
-def improve_policy(p, r, v, gamma=0.9):
+def improve_policy(p, r, v, gamma=0.9) -> np.ndarray:
     """ 提升策略.
+
+    :param p: 状态转移矩阵. p(s'|s, a)
+    :param r: 状态/动作奖励矩阵. r(s, a)
+    :param v: 状态价值函数. v(s)    
+    :param gamma: 折扣因子.
+    :return: 策略. pi(a|s)
     """
     q = v_to_q(p, r, v, gamma=gamma)
-    pi = np.zeros_like(q)
-
-    num_s = q.shape[0]
-    for s in range(num_s):
-        pi[s] = (q[s] == np.max(q[s]))
-        pi[s] = pi[s] / np.sum(pi[s])
-    return pi
+    return q_to_pi(q)
 
 
-def v_to_q(p, r, v, sa=None, gamma=0.9):
+def v_to_q(p, r, v, sa=None, gamma=0.9) -> np.ndarray:
     """ 状态价值转换为动作价值.
    
     q(s,a) = r(s,a)+ gamma * sum( p(s'|s,a) * v(s') )
@@ -157,16 +183,45 @@ def v_to_q(p, r, v, sa=None, gamma=0.9):
         return q
 
 
-def env_to_mat(P):
+def env_to_mat(P) -> Tuple[np.ndarray, np.ndarray]:
     """ 将环境变量转换为矩阵.
 
-    :param P: gym.env.P
-    :return: (p, r)
+    Args:
+        P: gym.env.P [dict]. [states][actions] -> list(tuple).   
+            tuple 内容 (概率, 下一状态, 奖励, 回合结束标志)
+
+    Returns:
+        (p, r). 
+        p - 状态转移矩阵.
+        r - 状态/动作奖励矩阵.
     """
     p = _env_to_p(P)
     r = _env_to_r(P)
     return p, r
 
+
+def env_to_mat_2(P) -> Tuple[np.ndarray, np.ndarray]:
+    """ 将环境变量转换为矩阵.
+
+    Args:
+        P: gym.env.P [dict]. [states][actions] -> list(tuple).   
+            tuple 内容 (概率, 下一状态, 奖励, 回合结束标志)
+
+    Returns:
+        (p, r). 
+        p - 状态转移矩阵.
+        r - 状态/动作奖励矩阵.
+    """
+    num_s, num_a = _env_n(P)
+    p, r = np.zeros((num_s, num_a, num_s)), np.zeros((num_s, num_a))
+    for si in range(num_s):
+        for ai in range(num_a):
+            items = P[si][ai]
+            for item in items:
+                vp, vs, vr, _ = item
+                r[si, ai] += vp * vr
+                p[si, ai, vs] += vp
+    return p, r
 
 def _env_to_r(P):
     """ 从环境动力 P 转换为 “状态-动作”期望奖励矩阵 R(S, A). 
