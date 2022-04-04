@@ -1,4 +1,3 @@
-import unittest
 import gym
 import numpy as np
 
