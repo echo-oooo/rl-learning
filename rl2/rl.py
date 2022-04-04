@@ -4,6 +4,7 @@ RL 常用函数.
 
 import numpy as np
 
+
 class Agent:
     def __init__(self, env):
         self.env = env
@@ -16,12 +17,19 @@ class Agent:
 
 
 def choose_action(pi, s):
-    """ 选择动作. """
+    """ 选择动作. 
+    
+    :param pi: 策略. pi(a|s)
+    :param s: 状态.
+    :return: a.
+    """
     pa = pi[s]
     a = np.random.choice(len(pa), p=pa)
     return a
 
+
 def env_n(env):
+    """ 获取环境状态-动作数量. """
     num_s = env.observation_space.n
     num_a = env.action_space.n
     return num_s, num_a
@@ -77,8 +85,3 @@ def random_policy(num_s, num_a, seed=None):
         for s in range(num_s):
             pi[s, a[s]] = 1.0
         return pi
-        
-        
-    
-
-
